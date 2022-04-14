@@ -7,7 +7,6 @@ import (
 	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	_ "embed"
 	"encoding/pem"
 	"fmt"
 	"log"
@@ -41,8 +40,6 @@ var (
 	host, _         = os.Hostname()
 	port            = 46010
 	SoftwareVersion = "0.3.0"
-	//go:embed nodeset.xml
-	nodeset []byte
 )
 
 func main() {
@@ -124,113 +121,139 @@ func main() {
 		os.Exit(1)
 	}
 
-	// load nodeset
+	// add namespace, save index for later
 	nm := srv.NamespaceManager()
-	if err := nm.LoadNodeSetFromBuffer([]byte(nodeset)); err != nil {
-		os.Exit(2)
-	}
+	nsi := nm.Add("http://github.com/awcullen/opcua/testserver/")
 
-	// install MethodNoArgs method
-	if n, ok := nm.FindMethod(ua.ParseNodeID("ns=2;s=Demo.Methods.MethodNoArgs")); ok {
-		n.SetCallMethodHandler(func(ctx context.Context, req ua.CallMethodRequest) ua.CallMethodResult {
-			return ua.CallMethodResult{}
-		})
-	}
+	// add 'Component' object.
+	component := server.NewObjectNode(
+		ua.NodeIDNumeric{NamespaceIndex: nsi, ID: 1},
+		ua.QualifiedName{NamespaceIndex: nsi, Name: "Component"},
+		ua.LocalizedText{Text: "Component"},
+		ua.LocalizedText{Text: "A component object for testing."},
+		nil,
+		[]ua.Reference{ // add object to 'Objects' folder
+			{
+				ReferenceTypeID: ua.ReferenceTypeIDOrganizes,
+				IsInverse:       true,
+				TargetID:        ua.ExpandedNodeID{NodeID: ua.ObjectIDObjectsFolder},
+			},
+		},
+		0,
+	)
+	// add 'Boolean' property
+	propBool := server.NewVariableNode(
+		ua.NodeIDNumeric{NamespaceIndex: nsi, ID: 2},
+		ua.QualifiedName{NamespaceIndex: nsi, Name: "Boolean"},
+		ua.LocalizedText{Text: "Boolean"},
+		ua.LocalizedText{Text: "A Boolean variable for testing."},
+		nil,
+		[]ua.Reference{ // add property to 'Component' object
+			{
+				ReferenceTypeID: ua.ReferenceTypeIDHasProperty,
+				IsInverse:       true,
+				TargetID:        ua.ExpandedNodeID{NodeID: component.NodeID()},
+			},
+		},
+		ua.DataValue{},
+		ua.DataTypeIDBoolean,
+		ua.ValueRankScalar,
+		[]uint32{},
+		ua.AccessLevelsCurrentRead|ua.AccessLevelsHistoryRead,
+		250.0,
+		true,
+		historian,
+	)
+	// add 'Int64' property
+	propInt64 := server.NewVariableNode(
+		ua.NodeIDNumeric{NamespaceIndex: nsi, ID: 3},
+		ua.QualifiedName{NamespaceIndex: nsi, Name: "Int64"},
+		ua.LocalizedText{Text: "Int64"},
+		ua.LocalizedText{Text: "An Int64 variable for testing."},
+		nil,
+		[]ua.Reference{ // add property to 'Component' object
+			{
+				ReferenceTypeID: ua.ReferenceTypeIDHasProperty,
+				IsInverse:       true,
+				TargetID:        ua.ExpandedNodeID{NodeID: component.NodeID()},
+			},
+		},
+		ua.DataValue{},
+		ua.DataTypeIDInt64,
+		ua.ValueRankScalar,
+		[]uint32{},
+		ua.AccessLevelsCurrentRead|ua.AccessLevelsHistoryRead,
+		250.0,
+		true,
+		historian,
+	)
+	// add 'Double' property
+	propDouble := server.NewVariableNode(
+		ua.NodeIDNumeric{NamespaceIndex: nsi, ID: 4},
+		ua.QualifiedName{NamespaceIndex: nsi, Name: "Double"},
+		ua.LocalizedText{Text: "Double"},
+		ua.LocalizedText{Text: "A Double variable for testing."},
+		nil,
+		[]ua.Reference{ // add property to 'Component' object
+			{
+				ReferenceTypeID: ua.ReferenceTypeIDHasProperty,
+				IsInverse:       true,
+				TargetID:        ua.ExpandedNodeID{NodeID: component.NodeID()},
+			},
+		},
+		ua.DataValue{},
+		ua.DataTypeIDDouble,
+		ua.ValueRankScalar,
+		[]uint32{},
+		ua.AccessLevelsCurrentRead|ua.AccessLevelsHistoryRead,
+		250.0,
+		true,
+		historian,
+	)
+	// add 'String' property
+	propString := server.NewVariableNode(
+		ua.NodeIDNumeric{NamespaceIndex: nsi, ID: 5},
+		ua.QualifiedName{NamespaceIndex: nsi, Name: "Double"},
+		ua.LocalizedText{Text: "String"},
+		ua.LocalizedText{Text: "A String variable for testing."},
+		nil,
+		[]ua.Reference{ // add property to 'Component' object
+			{
+				ReferenceTypeID: ua.ReferenceTypeIDHasProperty,
+				IsInverse:       true,
+				TargetID:        ua.ExpandedNodeID{NodeID: component.NodeID()},
+			},
+		},
+		ua.DataValue{},
+		ua.DataTypeIDString,
+		ua.ValueRankScalar,
+		[]uint32{},
+		ua.AccessLevelsCurrentRead|ua.AccessLevelsHistoryRead,
+		250.0,
+		true,
+		historian,
+	)
+	// add new nodes to namespace
+	nm.AddNodes([]server.Node{
+		component,
+		propBool,
+		propInt64,
+		propDouble,
+		propString,
+	})
 
-	// install MethodI method
-	if n, ok := nm.FindMethod(ua.ParseNodeID("ns=2;s=Demo.Methods.MethodI")); ok {
-		n.SetCallMethodHandler(func(ctx context.Context, req ua.CallMethodRequest) ua.CallMethodResult {
-			if len(req.InputArguments) < 1 {
-				return ua.CallMethodResult{StatusCode: ua.BadArgumentsMissing}
-			}
-			if len(req.InputArguments) > 1 {
-				return ua.CallMethodResult{StatusCode: ua.BadTooManyArguments}
-			}
-			statusCode := ua.Good
-			inputArgumentResults := make([]ua.StatusCode, 1)
-			_, ok := req.InputArguments[0].(uint32)
-			if !ok {
-				statusCode = ua.BadInvalidArgument
-				inputArgumentResults[0] = ua.BadTypeMismatch
-			}
-			if statusCode == ua.BadInvalidArgument {
-				return ua.CallMethodResult{StatusCode: statusCode, InputArgumentResults: inputArgumentResults}
-			}
-			return ua.CallMethodResult{OutputArguments: []ua.Variant{}}
-		})
-	}
-
-	// install MethodO method
-	if n, ok := nm.FindMethod(ua.ParseNodeID("ns=2;s=Demo.Methods.MethodO")); ok {
-		n.SetCallMethodHandler(func(ctx context.Context, req ua.CallMethodRequest) ua.CallMethodResult {
-			if len(req.InputArguments) > 0 {
-				return ua.CallMethodResult{StatusCode: ua.BadTooManyArguments}
-			}
-			result := uint32(42)
-			return ua.CallMethodResult{OutputArguments: []ua.Variant{uint32(result)}}
-		})
-	}
-
-	// install MethodIO method
-	if n, ok := nm.FindMethod(ua.ParseNodeID("ns=2;s=Demo.Methods.MethodIO")); ok {
-		n.SetCallMethodHandler(func(ctx context.Context, req ua.CallMethodRequest) ua.CallMethodResult {
-			if len(req.InputArguments) < 2 {
-				return ua.CallMethodResult{StatusCode: ua.BadArgumentsMissing}
-			}
-			if len(req.InputArguments) > 2 {
-				return ua.CallMethodResult{StatusCode: ua.BadTooManyArguments}
-			}
-			statusCode := ua.Good
-			inputArgumentResults := make([]ua.StatusCode, 2)
-			a, ok := req.InputArguments[0].(uint32)
-			if !ok {
-				statusCode = ua.BadInvalidArgument
-				inputArgumentResults[0] = ua.BadTypeMismatch
-			}
-			b, ok := req.InputArguments[1].(uint32)
-			if !ok {
-				statusCode = ua.BadInvalidArgument
-				inputArgumentResults[1] = ua.BadTypeMismatch
-			}
-			if statusCode == ua.BadInvalidArgument {
-				return ua.CallMethodResult{StatusCode: statusCode, InputArgumentResults: inputArgumentResults}
-			}
-			result := a + b
-			return ua.CallMethodResult{OutputArguments: []ua.Variant{uint32(result)}}
-		})
-	}
-
-	// Simulate process variables changing every second. Server stores values in historian. 
+	// Simulate process variables changing every second. Server stores values in historian.
 	go func() {
-		DemoDynamicScalarBool, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Bool"))
-		DemoDynamicScalarByte, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Byte"))
-		DemoDynamicScalarDouble, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Double"))
-		DemoDynamicScalarFloat, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Float"))
-		DemoDynamicScalarInt16, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Int16"))
-		DemoDynamicScalarInt32, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Int32"))
-		DemoDynamicScalarInt64, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Int64"))
-		DemoDynamicScalarSByte, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.SByte"))
-		DemoDynamicScalarUInt16, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.UInt16"))
-		DemoDynamicScalarUInt32, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.UInt32"))
-		DemoDynamicScalarUInt64, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.UInt64"))
-		DemoDynamicScalarString, _ := nm.FindVariable(ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.String"))
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				DemoDynamicScalarBool.SetValue(ua.NewDataValue(bool(math_rand.Intn(10) >= 5), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarByte.SetValue(ua.NewDataValue(byte(math_rand.Intn(math.MaxUint8)), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarDouble.SetValue(ua.NewDataValue(math_rand.Float64(), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarFloat.SetValue(ua.NewDataValue(float32(math_rand.Float64()), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarInt16.SetValue(ua.NewDataValue(int16(math_rand.Intn(math.MaxInt16)), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarInt32.SetValue(ua.NewDataValue(int32(math_rand.Intn(math.MaxInt32)), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarInt64.SetValue(ua.NewDataValue(int64(math_rand.Intn(math.MaxInt64)), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarSByte.SetValue(ua.NewDataValue(int8(math_rand.Intn(math.MaxInt8)), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarUInt16.SetValue(ua.NewDataValue(uint16(math_rand.Intn(math.MaxInt16)), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarUInt32.SetValue(ua.NewDataValue(uint32(math_rand.Intn(math.MaxInt32)), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarUInt64.SetValue(ua.NewDataValue(uint64(math_rand.Intn(math.MaxInt64)), 0, time.Now(), 0, time.Now(), 0))
-				DemoDynamicScalarString.SetValue(ua.NewDataValue(time.Now().Format(time.StampMilli), 0, time.Now(), 0, time.Now(), 0))
+				t := time.Now().UTC() 
+				propBool.SetValue(ua.NewDataValue(bool(t.Second()%2 != 0), 0, t, 0, t, 0))
+				propInt64.SetValue(ua.NewDataValue(int64(math_rand.Intn(math.MaxInt64)), 0, t, 0, t, 0))
+				propDouble.SetValue(ua.NewDataValue(math_rand.Float64(), 0, t, 0, t, 0))
+				propString.SetValue(ua.NewDataValue(t.Format(time.StampMilli), 0, t, 0, t, 0))
 			case <-srv.Closing():
 				return
 			}

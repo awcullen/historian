@@ -92,7 +92,7 @@ func TestReadHistory(t *testing.T) {
 			TimestampsToReturn:        ua.TimestampsToReturnBoth,
 			ReleaseContinuationPoints: false,
 			NodesToRead: []ua.HistoryReadValueID{
-				{NodeID: ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Double"), ContinuationPoint: cp},
+				{NodeID: ua.ParseNodeID("ns=2;i=4"), ContinuationPoint: cp},
 			},
 		}
 
@@ -133,7 +133,7 @@ func TestReadHistory(t *testing.T) {
 		TimestampsToReturn:        ua.TimestampsToReturnBoth,
 		ReleaseContinuationPoints: false,
 		NodesToRead: []ua.HistoryReadValueID{
-			{NodeID: ua.ParseNodeID("ns=2;s=Demo.Dynamic.Scalar.Double")},
+			{NodeID: ua.ParseNodeID("ns=2;i=4")},
 		},
 	}
 
